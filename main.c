@@ -6,7 +6,7 @@
 #include "twi-no_stretch-tiny20-drvr.h"
 
 // COMMENT THE LINE BELOW BEFORE COMPILING
-#include <avr/iotn20.h>
+// #include <avr/iotn20.h>
 
 #define BATT_CNTL PORTA5
 #define PHONE_ON PORTA6
@@ -17,6 +17,8 @@
 
 #define TOUCH_INT PCINT4
 #define FINGER_INT PCINT10
+
+uint8_t lastRegisterPoll = 0;
 
 void turnOffPower()
 {
@@ -46,6 +48,29 @@ void activateSnapdragon()
     else if (!(PINA & (1<<PHONE_ON)))
     {
         turnOnSnapdragon();
+    }
+}
+
+uint8_t getADCvoltage()
+{
+    ADCSRA |= (1<<ADSC);
+    return ((ADCH << 8) | ADCL) * 255 / 1023;
+}
+
+void twi_data_from_master(unsigned char data)
+{
+    lastRegisterPoll = data;
+}
+
+unsigned char twi_data_to_master()
+{
+    switch(lastRegisterPoll)
+    {
+        case 0x01:
+            return getADCvoltage();
+            break;
+        default:
+            return 0;
     }
 }
 
@@ -98,13 +123,22 @@ int main()
     PCMSK1 |= (1<<FINGER_INT);
     PCMSK0 |= (1<<TOUCH_INT);
 
-    // Set Analog Comparator Interrupt Mode to rising edge
+    // Analog Comparator
+    // Set Interrupt Mode to rising edge
     ACSRA |= (1<<ACIS0)|(1<<ACIS1);
-    // Enable Analog Comparator Interrupt
+    // Enable Interrupt
     ACSRA |= (1<<ACIE);
     // 20mV hysteresis
     ACSRB |= (1<<HSEL);
-    
+
+    // ADC
+    // Set vref to internal 1.1V and ADC0
+    ADMUX |= (1<<REFS);
+    // Enable ADC and set ADC Prescaler to 32
+    ADCSRA |= (1<<ADEN)|(1<<ADPS2)|(1<<ADPS0);
+    // Start first conversion
+    ADCSRA |= (1<<ADSC);
+
     // Enable all interrupts
     sei();
 
